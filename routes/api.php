@@ -28,6 +28,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/student/login', [AuthController::class, 'studentLogin']);
+Route::post('/auth/teacher/login', [AuthController::class, 'login']); // Teacher login uses same endpoint as admin
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -75,6 +76,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Teacher routes
     Route::middleware('teacher')->group(function () {
+        Route::get('/teacher/assignments', [TeacherController::class, 'getAssignments']);
         Route::get('/teacher/classes', [TeacherController::class, 'getClasses']);
         Route::get('/teacher/subjects', [TeacherController::class, 'getSubjects']);
         Route::get('/teacher/students', [TeacherController::class, 'getStudents']);
@@ -89,9 +91,9 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Student routes
     Route::middleware('student')->group(function () {
-        Route::get('/student/profile', [StudentController::class, 'profile']);
-        Route::get('/student/results', [StudentController::class, 'results']);
-        Route::get('/student/subjects', [StudentController::class, 'subjects']);
+        Route::get('/student/profile', [StudentController::class, 'getProfile']);
+        Route::get('/student/results', [StudentController::class, 'getResults']);
+        Route::get('/student/subjects', [StudentController::class, 'index']);
         Route::get('/student/dashboard', [StudentController::class, 'dashboard']);
     });
 }); 

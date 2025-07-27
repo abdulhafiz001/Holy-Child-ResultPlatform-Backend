@@ -14,9 +14,12 @@ class ClassController extends Controller
      */
     public function index()
     {
-        $classes = SchoolClass::withCount(['students' => function ($query) {
-            $query->where('is_active', true);
-        }])->where('is_active', true)->get();
+        $classes = SchoolClass::with('formTeacher')
+                             ->withCount(['students' => function ($query) {
+                                 $query->where('is_active', true);
+                             }])
+                             ->where('is_active', true)
+                             ->get();
 
         return response()->json($classes);
     }
@@ -29,17 +32,19 @@ class ClassController extends Controller
         $request->validate([
             'name' => 'required|string|unique:classes,name',
             'description' => 'nullable|string',
+            'form_teacher_id' => 'nullable|exists:users,id',
         ]);
 
         $class = SchoolClass::create([
             'name' => $request->name,
             'description' => $request->description,
+            'form_teacher_id' => $request->form_teacher_id,
             'is_active' => true,
         ]);
 
         return response()->json([
             'message' => 'Class created successfully',
-            'class' => $class,
+            'class' => $class->load('formTeacher'),
         ], 201);
     }
 
@@ -64,6 +69,7 @@ class ClassController extends Controller
         $request->validate([
             'name' => 'required|string|unique:classes,name,' . $class->id,
             'description' => 'nullable|string',
+            'form_teacher_id' => 'nullable|exists:users,id',
             'is_active' => 'boolean',
         ]);
 
@@ -71,7 +77,7 @@ class ClassController extends Controller
 
         return response()->json([
             'message' => 'Class updated successfully',
-            'class' => $class,
+            'class' => $class->load('formTeacher'),
         ]);
     }
 

@@ -114,11 +114,21 @@ class AdminController extends Controller
     /**
      * Delete a user
      */
-    public function deleteUser(User $user)
+    public function deleteUser(Request $request, User $user)
     {
-        $user->update(['is_active' => false]);
-        
-        return response()->json(['message' => 'User deactivated successfully']);
+        // Check if this is a hard delete request
+        $hardDelete = $request->query('hard_delete', false);
+
+        if ($hardDelete === 'true') {
+            // Hard delete - completely remove from database
+            // The boot method in User model will handle cascade deletion
+            $user->delete();
+            return response()->json(['message' => 'User permanently deleted successfully']);
+        } else {
+            // Soft delete - just deactivate
+            $user->update(['is_active' => false]);
+            return response()->json(['message' => 'User deactivated successfully']);
+        }
     }
 
     /**
@@ -182,5 +192,122 @@ class AdminController extends Controller
         $assignment->update(['is_active' => false]);
         
         return response()->json(['message' => 'Teacher assignment removed successfully']);
+    }
+
+    /**
+     * Get all students
+     */
+    public function getStudents()
+    {
+        $students = Student::with(['schoolClass', 'studentSubjects.subject'])
+                          ->where('is_active', true)
+                          ->get();
+
+        return response()->json($students);
+    }
+
+    /**
+     * Create a new student
+     */
+    public function createStudent(Request $request)
+    {
+        $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'admission_number' => 'required|string|unique:students,admission_number',
+            'email' => 'nullable|email|unique:students,email',
+            'phone' => 'nullable|string',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:male,female',
+            'address' => 'nullable|string',
+            'parent_name' => 'nullable|string',
+            'parent_phone' => 'nullable|string',
+            'parent_email' => 'nullable|email',
+            'class_id' => 'required|exists:classes,id',
+            'subjects' => 'array',
+            'subjects.*' => 'exists:subjects,id',
+        ]);
+
+        $student = Student::create([
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'middle_name' => $request->middle_name,
+            'admission_number' => $request->admission_number,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'date_of_birth' => $request->date_of_birth,
+            'gender' => $request->gender,
+            'address' => $request->address,
+            'parent_name' => $request->parent_name,
+            'parent_phone' => $request->parent_phone,
+            'parent_email' => $request->parent_email,
+            'class_id' => $request->class_id,
+            'is_active' => true,
+        ]);
+
+        // Create student subject relationships
+        if ($request->subjects) {
+            foreach ($request->subjects as $subjectId) {
+                \App\Models\StudentSubject::create([
+                    'student_id' => $student->id,
+                    'subject_id' => $subjectId,
+                    'is_active' => true,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Student created successfully',
+            'student' => $student->load(['schoolClass', 'studentSubjects.subject']),
+        ], 201);
+    }
+
+    /**
+     * Get a specific student
+     */
+    public function getStudent(Student $student)
+    {
+        return response()->json($student->load(['schoolClass', 'studentSubjects.subject']));
+    }
+
+    /**
+     * Update a student
+     */
+    public function updateStudent(Request $request, Student $student)
+    {
+        $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'admission_number' => 'required|string|unique:students,admission_number,' . $student->id,
+            'email' => 'nullable|email|unique:students,email,' . $student->id,
+            'phone' => 'nullable|string',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:male,female',
+            'address' => 'nullable|string',
+            'parent_name' => 'nullable|string',
+            'parent_phone' => 'nullable|string',
+            'parent_email' => 'nullable|email',
+            'class_id' => 'required|exists:classes,id',
+            'is_active' => 'boolean',
+        ]);
+
+        $student->update($request->all());
+
+        return response()->json([
+            'message' => 'Student updated successfully',
+            'student' => $student->load(['schoolClass', 'studentSubjects.subject']),
+        ]);
+    }
+
+    /**
+     * Delete a student
+     */
+    public function deleteStudent(Student $student)
+    {
+        $student->update(['is_active' => false]);
+        
+        return response()->json(['message' => 'Student deactivated successfully']);
     }
 } 

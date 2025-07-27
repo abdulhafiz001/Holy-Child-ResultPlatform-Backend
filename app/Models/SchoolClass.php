@@ -14,6 +14,7 @@ class SchoolClass extends Model
     protected $fillable = [
         'name',
         'description',
+        'form_teacher_id',
         'is_active',
     ];
 
@@ -46,10 +47,10 @@ class SchoolClass extends Model
     }
 
     /**
-     * Get the form teacher (first teacher assigned to this class)
+     * Get the form teacher
      */
     public function formTeacher()
     {
-        return $this->teachers()->first();
+        return $this->belongsTo(User::class, 'form_teacher_id');
     }
 } 

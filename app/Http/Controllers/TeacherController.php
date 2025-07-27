@@ -57,13 +57,55 @@ class TeacherController extends Controller
     public function getAssignments(Request $request)
     {
         $teacher = $request->user();
-        
+
         $assignments = TeacherSubject::with(['subject', 'schoolClass'])
                                    ->where('teacher_id', $teacher->id)
                                    ->where('is_active', true)
                                    ->get();
 
         return response()->json($assignments);
+    }
+
+    /**
+     * Get teacher's assigned classes
+     */
+    public function getClasses(Request $request)
+    {
+        $teacher = $request->user();
+
+        $classes = TeacherSubject::with(['schoolClass', 'subject'])
+                                ->where('teacher_id', $teacher->id)
+                                ->where('is_active', true)
+                                ->get()
+                                ->groupBy('class_id')
+                                ->map(function ($assignments) {
+                                    $class = $assignments->first()->schoolClass;
+                                    $class->subjects = $assignments->pluck('subject');
+                                    return $class;
+                                })
+                                ->values();
+
+        return response()->json($classes);
+    }
+
+    /**
+     * Get teacher's assigned subjects
+     */
+    public function getSubjects(Request $request)
+    {
+        $teacher = $request->user();
+
+        $subjects = TeacherSubject::with(['subject', 'schoolClass'])
+                                 ->where('teacher_id', $teacher->id)
+                                 ->where('is_active', true)
+                                 ->get()
+                                 ->map(function ($assignment) {
+                                     $subject = $assignment->subject;
+                                     $subject->class = $assignment->schoolClass;
+                                     return $subject;
+                                 });
+
+        return response()->json($subjects);
     }
 
     /**

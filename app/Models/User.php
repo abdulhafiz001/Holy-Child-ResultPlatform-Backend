@@ -52,6 +52,24 @@ class User extends Authenticatable
     }
 
     /**
+     * Boot method to handle model events
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function ($user) {
+            // When deleting a teacher, remove all their assignments
+            if ($user->isTeacher()) {
+                $user->teacherSubjects()->delete();
+
+                // Remove as form teacher from any classes
+                \App\Models\SchoolClass::where('form_teacher_id', $user->id)->update(['form_teacher_id' => null]);
+            }
+        });
+    }
+
+    /**
      * Check if user is admin
      */
     public function isAdmin(): bool
@@ -72,7 +90,7 @@ class User extends Authenticatable
      */
     public function teacherSubjects()
     {
-        return $this->hasMany(TeacherSubject::class);
+        return $this->hasMany(\App\Models\TeacherSubject::class, 'teacher_id');
     }
 
     /**
@@ -80,6 +98,6 @@ class User extends Authenticatable
      */
     public function assignedClasses()
     {
-        return $this->hasManyThrough(SchoolClass::class, TeacherSubject::class, 'teacher_id', 'id', 'id', 'class_id');
+        return $this->hasManyThrough(\App\Models\SchoolClass::class, \App\Models\TeacherSubject::class, 'teacher_id', 'id', 'id', 'class_id');
     }
 }
