@@ -6,7 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class AdminMiddleware
+class FormTeacherMiddleware
 {
     /**
      * Handle an incoming request.
@@ -15,10 +15,17 @@ class AdminMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!$request->user() || !$request->user()->isAdmin() || !$request->user()->is_active) {
-            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        $user = $request->user();
+        
+        if (!$user || !$user->isTeacher() || !$user->is_active) {
+            return response()->json(['message' => 'Unauthorized. Teacher access required.'], 403);
+        }
+        
+        if (!$user->isFormTeacher()) {
+            return response()->json(['message' => 'Access denied. Only form teachers can access this resource.'], 403);
         }
 
         return $next($request);
     }
-} 
+}
+

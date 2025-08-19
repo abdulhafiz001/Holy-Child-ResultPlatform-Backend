@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\SchoolClass;
 
 class User extends Authenticatable
 {
@@ -22,6 +23,7 @@ class User extends Authenticatable
         'username',
         'password',
         'role', // 'admin' or 'teacher'
+        'is_form_teacher',
         'phone',
         'address',
         'is_active',
@@ -83,6 +85,24 @@ class User extends Authenticatable
     public function isTeacher(): bool
     {
         return $this->role === 'teacher';
+    }
+
+    /**
+     * Check if user is a form teacher
+     */
+    public function isFormTeacher(): bool
+    {
+        return $this->is_form_teacher || $this->hasFormTeacherClasses();
+    }
+
+    /**
+     * Check if user has form teacher classes
+     */
+    public function hasFormTeacherClasses(): bool
+    {
+        return SchoolClass::where('form_teacher_id', $this->id)
+                         ->where('is_active', true)
+                         ->exists();
     }
 
     /**

@@ -15,7 +15,7 @@ class TeacherMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!$request->user() || !$request->user()->isTeacher()) {
+        if (!$request->user() || !$request->user()->isTeacher() || !$request->user()->is_active) {
             return response()->json(['message' => 'Unauthorized. Teacher access required.'], 403);
         }
 

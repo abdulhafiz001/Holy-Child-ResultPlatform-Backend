@@ -12,16 +12,41 @@ class ClassController extends Controller
     /**
      * Get all classes
      */
-    public function index()
+    public function index(Request $request)
     {
-        $classes = SchoolClass::with('formTeacher')
-                             ->withCount(['students' => function ($query) {
-                                 $query->where('is_active', true);
-                             }])
-                             ->where('is_active', true)
-                             ->get();
+        $user = $request->user();
+        
+        if ($user->isAdmin()) {
+            // Admin can see all classes
+            $classes = SchoolClass::with(['formTeacher', 'students' => function ($query) {
+                                     $query->where('is_active', true);
+                                 }])
+                                 ->where('is_active', true)
+                                 ->get();
+        } elseif ($user->isFormTeacher()) {
+            // Form teachers can only see classes where they are form teacher
+            $classes = SchoolClass::with(['formTeacher', 'students' => function ($query) {
+                                     $query->where('is_active', true);
+                                 }])
+                                 ->where('form_teacher_id', $user->id)
+                                 ->where('is_active', true)
+                                 ->get();
+        } else {
+            // Regular teachers cannot access classes page
+            return response()->json(['message' => 'Access denied. Only admins and form teachers can view classes.'], 403);
+        }
+        
+        // Manually add student count for each class
+        $classes = $classes->map(function ($class) {
+            $class->student_count = $class->students->count();
+            return $class;
+        });
 
-        return response()->json($classes);
+        return response()->json([
+            'data' => $classes,
+            'total' => $classes->count(),
+            'message' => 'Classes retrieved successfully'
+        ]);
     }
 
     /**
@@ -51,8 +76,15 @@ class ClassController extends Controller
     /**
      * Get a specific class
      */
-    public function show(SchoolClass $class)
+    public function show(Request $request, SchoolClass $class)
     {
+        $user = $request->user();
+        
+        // Check if user is admin or form teacher of this class
+        if (!$user->isAdmin() && $class->form_teacher_id !== $user->id) {
+            return response()->json(['message' => 'Access denied. You can only view classes where you are the form teacher.'], 403);
+        }
+        
         return response()->json($class->load([
             'students' => function ($query) {
                 $query->where('is_active', true);
@@ -98,5 +130,22 @@ class ClassController extends Controller
         $class->update(['is_active' => false]);
         
         return response()->json(['message' => 'Class deactivated successfully']);
+    }
+
+    /**
+     * Debug method to test form teacher endpoint
+     */
+    public function debugFormTeacher(Request $request)
+    {
+        $user = $request->user();
+        
+        return response()->json([
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'is_admin' => $user->isAdmin(),
+            'is_form_teacher' => $user->isFormTeacher(),
+            'form_teacher_classes' => SchoolClass::where('form_teacher_id', $user->id)->pluck('id'),
+            'message' => 'Debug info for form teacher endpoint'
+        ]);
     }
 } 

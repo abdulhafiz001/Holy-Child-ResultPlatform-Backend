@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\SchoolClass;
 use App\Models\TeacherSubject;
+use App\Models\StudentSubject;
 
 class ScoreController extends Controller
 {
@@ -16,11 +17,45 @@ class ScoreController extends Controller
      */
     public function adminIndex(Request $request)
     {
-        $query = Score::with(['student', 'subject', 'schoolClass', 'teacher'])
-                     ->where('is_active', true);
+        $user = $request->user();
+        
+        // Check if user is admin, form teacher, or assigned teacher
+        if (!$user->isAdmin()) {
+            // For teachers, check if they are form teacher of any class
+            if ($user->isFormTeacher()) {
+                // Form teacher can see results of students in their assigned classes
+                $formTeacherClasses = SchoolClass::where('form_teacher_id', $user->id)
+                                               ->where('is_active', true)
+                                               ->pluck('id');
+                
+                if ($formTeacherClasses->isEmpty()) {
+                    return response()->json(['message' => 'No classes assigned as form teacher'], 403);
+                }
+                
+                $query = Score::with(['student', 'subject', 'schoolClass', 'teacher'])
+                             ->whereIn('class_id', $formTeacherClasses)
+                             ->where('is_active', true);
+            } else {
+                // Regular teachers cannot access results page
+                return response()->json(['message' => 'Access denied. Only form teachers can view results.'], 403);
+            }
+        } else {
+            // Admin can see all results
+            $query = Score::with(['student', 'subject', 'schoolClass', 'teacher'])
+                         ->where('is_active', true);
+        }
 
         // Filter by class
         if ($request->has('class_id')) {
+            if (!$user->isAdmin()) {
+                // For teachers, ensure they can only filter by their form teacher classes
+                $formTeacherClasses = SchoolClass::where('form_teacher_id', $user->id)
+                                               ->where('is_active', true)
+                                               ->pluck('id');
+                if (!$formTeacherClasses->contains($request->class_id)) {
+                    return response()->json(['message' => 'Access denied to this class'], 403);
+                }
+            }
             $query->where('class_id', $request->class_id);
         }
 
@@ -46,8 +81,17 @@ class ScoreController extends Controller
     {
         $teacher = $request->user();
         
+        // Get teacher's assigned subjects
+        $assignedSubjectIds = TeacherSubject::where('teacher_id', $teacher->id)
+                                          ->where('is_active', true)
+                                          ->pluck('subject_id');
+        
+        if ($assignedSubjectIds->isEmpty()) {
+            return response()->json(['message' => 'You are not assigned to teach any subjects'], 403);
+        }
+        
         $query = Score::with(['student', 'subject', 'schoolClass'])
-                     ->where('teacher_id', $teacher->id)
+                     ->whereIn('subject_id', $assignedSubjectIds)
                      ->where('is_active', true);
 
         // Filter by class
@@ -57,6 +101,10 @@ class ScoreController extends Controller
 
         // Filter by subject
         if ($request->has('subject_id')) {
+            // Ensure teacher can only filter by subjects they are assigned to teach
+            if (!$assignedSubjectIds->contains($request->subject_id)) {
+                return response()->json(['message' => 'You are not assigned to teach this subject'], 403);
+            }
             $query->where('subject_id', $request->subject_id);
         }
 
@@ -66,6 +114,110 @@ class ScoreController extends Controller
         }
 
         $scores = $query->paginate(20);
+
+        return response()->json($scores);
+    }
+
+    /**
+     * Get teacher's assigned classes and subjects for score management
+     */
+    public function getTeacherAssignmentsForScores(Request $request)
+    {
+        $teacher = $request->user();
+        
+        $assignments = TeacherSubject::with(['schoolClass', 'subject'])
+                                   ->where('teacher_id', $teacher->id)
+                                   ->where('is_active', true)
+                                   ->get()
+                                   ->groupBy('class_id')
+                                   ->map(function ($classAssignments) {
+                                       $class = $classAssignments->first()->schoolClass;
+                                       $class->subjects = $classAssignments->pluck('subject');
+                                       return $class;
+                                   })
+                                   ->values();
+
+        return response()->json($assignments);
+    }
+
+    /**
+     * Get students for a specific class and subject combination
+     */
+    public function getStudentsForClassSubject(Request $request)
+    {
+        $request->validate([
+            'class_id' => 'required|exists:classes,id',
+            'subject_id' => 'required|exists:subjects,id',
+        ]);
+
+        $teacher = $request->user();
+        
+        // Check if teacher is assigned to this class and subject
+        $assignment = TeacherSubject::where('teacher_id', $teacher->id)
+                                   ->where('class_id', $request->class_id)
+                                   ->where('subject_id', $request->subject_id)
+                                   ->where('is_active', true)
+                                   ->first();
+
+        if (!$assignment) {
+            return response()->json(['message' => 'You are not assigned to this class and subject'], 403);
+        }
+
+        // Get students in the class who are taking this subject
+        $students = Student::where('class_id', $request->class_id)
+                          ->where('is_active', true)
+                          ->whereHas('studentSubjects', function ($query) use ($request) {
+                              $query->where('subject_id', $request->subject_id)
+                                    ->where('is_active', true);
+                          })
+                          ->get();
+
+        return response()->json($students);
+    }
+
+    /**
+     * Get existing scores for students in a class-subject combination
+     */
+    public function getExistingScores(Request $request)
+    {
+        $request->validate([
+            'class_id' => 'required|exists:classes,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'term' => 'required|in:first,second,third',
+        ]);
+
+        $teacher = $request->user();
+        
+        // Check if teacher is assigned to this class and subject
+        $assignment = TeacherSubject::where('teacher_id', $teacher->id)
+                                   ->where('class_id', $request->class_id)
+                                   ->where('subject_id', $request->subject_id)
+                                   ->where('is_active', true)
+                                   ->first();
+
+        if (!$assignment) {
+            return response()->json(['message' => 'You are not assigned to this class and subject'], 403);
+        }
+
+        // Get existing scores for students in this class-subject-term combination
+        // Teachers can only see scores they recorded themselves OR scores for subjects they are assigned to teach
+        $scores = Score::with(['student'])
+                      ->where('class_id', $request->class_id)
+                      ->where('subject_id', $request->subject_id)
+                      ->where('term', $request->term)
+                      ->where('is_active', true)
+                      ->where(function ($query) use ($teacher) {
+                          // Teacher can see scores they recorded
+                          $query->where('teacher_id', $teacher->id)
+                                // OR scores for subjects they are assigned to teach (even if recorded by another teacher)
+                                ->orWhereHas('subject', function ($subQuery) use ($teacher) {
+                                    $subQuery->whereHas('teacherSubjects', function ($tsQuery) use ($teacher) {
+                                        $tsQuery->where('teacher_id', $teacher->id)
+                                               ->where('is_active', true);
+                                    });
+                                });
+                      })
+                      ->get();
 
         return response()->json($scores);
     }
@@ -88,10 +240,13 @@ class ScoreController extends Controller
             return response()->json(['message' => 'You are not assigned to this class'], 403);
         }
 
+        // Get the subject IDs the teacher is assigned to teach in this class
+        $assignedSubjectIds = $assignments->pluck('subject_id');
+
         $students = $class->students()
                          ->where('is_active', true)
-                         ->with(['scores' => function ($query) use ($teacher) {
-                             $query->where('teacher_id', $teacher->id)
+                         ->with(['scores' => function ($query) use ($teacher, $assignedSubjectIds) {
+                             $query->whereIn('subject_id', $assignedSubjectIds)
                                    ->where('is_active', true)
                                    ->with('subject');
                          }])
@@ -99,8 +254,8 @@ class ScoreController extends Controller
 
         return response()->json([
             'class' => $class,
-            'assignments' => $assignments,
             'students' => $students,
+            'assignments' => $assignments,
         ]);
     }
 
@@ -109,59 +264,83 @@ class ScoreController extends Controller
      */
     public function store(Request $request)
     {
-        $teacher = $request->user();
-        
         $request->validate([
             'student_id' => 'required|exists:students,id',
             'subject_id' => 'required|exists:subjects,id',
             'class_id' => 'required|exists:classes,id',
-            'first_ca' => 'nullable|numeric|min:0|max:20',
-            'second_ca' => 'nullable|numeric|min:0|max:20',
-            'exam' => 'nullable|numeric|min:0|max:60',
-            'term' => 'required|string',
-            'academic_year' => 'required|string',
+            'term' => 'required|in:first,second,third',
+            'first_ca' => 'nullable|numeric|min:0|max:100',
+            'second_ca' => 'nullable|numeric|min:0|max:100',
+            'exam_score' => 'nullable|numeric|min:0|max:100',
+            'remark' => 'nullable|string|max:255',
         ]);
 
-        // Check if teacher is assigned to this subject and class
-        $isAssigned = TeacherSubject::where('teacher_id', $teacher->id)
-                                   ->where('subject_id', $request->subject_id)
-                                   ->where('class_id', $request->class_id)
-                                   ->where('is_active', true)
-                                   ->exists();
-
-        if (!$isAssigned) {
-            return response()->json(['message' => 'You are not assigned to this subject and class'], 403);
+        // At least one score field must be provided
+        if (!$request->first_ca && !$request->second_ca && !$request->exam_score) {
+            return response()->json([
+                'message' => 'At least one score field must be provided'
+            ], 422);
         }
 
-        // Check if score already exists for this student, subject, term, and academic year
-        $existingScore = Score::where('student_id', $request->student_id)
-                             ->where('subject_id', $request->subject_id)
-                             ->where('term', $request->term)
-                             ->where('academic_year', $request->academic_year)
-                             ->first();
+        // Check permissions for non-admin users
+        $user = $request->user();
+        if (!$user->isAdmin()) {
+            // Check if user is form teacher of this class or assigned to teach any subject in this class
+            $class = \App\Models\SchoolClass::find($request->class_id);
+            if (!$class) {
+                return response()->json(['message' => 'Class not found'], 404);
+            }
+            
+            $isFormTeacher = $class->form_teacher_id === $user->id;
+            $isSubjectTeacher = \App\Models\TeacherSubject::where('teacher_id', $user->id)
+                                                          ->where('class_id', $request->class_id)
+                                                          ->where('is_active', true)
+                                                          ->exists();
+            
+            if (!$isFormTeacher && !$isSubjectTeacher) {
+                return response()->json(['message' => 'You can only manage scores for students in your assigned classes'], 403);
+            }
+        }
+
+        // Check if score already exists for this student, subject, class, and term
+        $existingScore = Score::where([
+            'student_id' => $request->student_id,
+            'subject_id' => $request->subject_id,
+            'class_id' => $request->class_id,
+            'term' => $request->term,
+        ])->first();
 
         if ($existingScore) {
-            return response()->json(['message' => 'Score already exists for this student, subject, term, and academic year'], 400);
+            // Update existing score instead of creating new one
+            $existingScore->update([
+                'first_ca' => $request->first_ca,
+                'second_ca' => $request->second_ca,
+                'exam_score' => $request->exam_score,
+                'remark' => $request->remark,
+            ]);
+            
+            return response()->json([
+                'message' => 'Score updated successfully',
+                'score' => $existingScore->load(['student', 'subject', 'schoolClass'])
+            ], 200);
         }
 
+        // Create new score if none exists
         $score = Score::create([
             'student_id' => $request->student_id,
             'subject_id' => $request->subject_id,
             'class_id' => $request->class_id,
-            'teacher_id' => $teacher->id,
-            'first_ca' => $request->first_ca ?? 0,
-            'second_ca' => $request->second_ca ?? 0,
-            'exam' => $request->exam ?? 0,
+            'teacher_id' => $request->user()->id,
             'term' => $request->term,
-            'academic_year' => $request->academic_year,
-            'is_active' => true,
+            'first_ca' => $request->first_ca,
+            'second_ca' => $request->second_ca,
+            'exam_score' => $request->exam_score,
+            'remark' => $request->remark,
         ]);
 
-        // The total, grade, and remark will be calculated automatically by the model
-
         return response()->json([
-            'message' => 'Score recorded successfully',
-            'score' => $score->load(['student', 'subject', 'schoolClass']),
+            'message' => 'Score created successfully',
+            'score' => $score->load(['student', 'subject', 'schoolClass'])
         ], 201);
     }
 
@@ -170,63 +349,285 @@ class ScoreController extends Controller
      */
     public function update(Request $request, Score $score)
     {
-        $teacher = $request->user();
-        
-        // Check if teacher owns this score
-        if ($score->teacher_id !== $teacher->id) {
-            return response()->json(['message' => 'You can only update your own scores'], 403);
+        $request->validate([
+            'first_ca' => 'nullable|numeric|min:0|max:100',
+            'second_ca' => 'nullable|numeric|min:0|max:100',
+            'exam_score' => 'nullable|numeric|min:0|max:100',
+            'remark' => 'nullable|string|max:255',
+        ]);
+
+        // At least one score field must be provided
+        if (!$request->first_ca && !$request->second_ca && !$request->exam_score) {
+            return response()->json([
+                'message' => 'At least one score field must be provided'
+            ], 422);
         }
 
-        $request->validate([
-            'first_ca' => 'nullable|numeric|min:0|max:20',
-            'second_ca' => 'nullable|numeric|min:0|max:20',
-            'exam' => 'nullable|numeric|min:0|max:60',
-        ]);
+        // Check permissions for non-admin users
+        $user = $request->user();
+        if (!$user->isAdmin()) {
+            // Check if user is form teacher of this class or assigned to teach any subject in this class
+            $class = \App\Models\SchoolClass::find($score->class_id);
+            if (!$class) {
+                return response()->json(['message' => 'Class not found'], 404);
+            }
+            
+            $isFormTeacher = $class->form_teacher_id === $user->id;
+            $isSubjectTeacher = \App\Models\TeacherSubject::where('teacher_id', $user->id)
+                                                          ->where('class_id', $score->class_id)
+                                                          ->where('is_active', true)
+                                                          ->exists();
+            
+            if (!$isFormTeacher && !$isSubjectTeacher) {
+                return response()->json(['message' => 'You can only manage scores for students in your assigned classes'], 403);
+            }
+        }
 
         $score->update([
-            'first_ca' => $request->first_ca ?? $score->first_ca,
-            'second_ca' => $request->second_ca ?? $score->second_ca,
-            'exam' => $request->exam ?? $score->exam,
+            'first_ca' => $request->first_ca,
+            'second_ca' => $request->second_ca,
+            'exam_score' => $request->exam_score,
+            'remark' => $request->remark,
         ]);
 
-        // The total, grade, and remark will be recalculated automatically
-
-        return response()->json([
-            'message' => 'Score updated successfully',
-            'score' => $score->load(['student', 'subject', 'schoolClass']),
-        ]);
+        return response()->json($score->load(['student', 'subject', 'schoolClass']));
     }
 
     /**
-     * Delete a score
+     * Get scores for a specific subject that teacher is assigned to teach
      */
-    public function destroy(Score $score)
+    public function getSubjectScores(Request $request)
     {
+        $request->validate([
+            'subject_id' => 'required|exists:subjects,id',
+            'class_id' => 'required|exists:classes,id',
+            'term' => 'nullable|in:first,second,third',
+        ]);
+
         $teacher = $request->user();
         
-        // Check if teacher owns this score
-        if ($score->teacher_id !== $teacher->id) {
-            return response()->json(['message' => 'You can only delete your own scores'], 403);
+        // Check if teacher is assigned to teach this subject in this class
+        $assignment = TeacherSubject::where('teacher_id', $teacher->id)
+                                   ->where('subject_id', $request->subject_id)
+                                   ->where('class_id', $request->class_id)
+                                   ->where('is_active', true)
+                                   ->first();
+
+        if (!$assignment) {
+            return response()->json(['message' => 'You are not assigned to teach this subject in this class'], 403);
         }
 
-        $score->update(['is_active' => false]);
-        
-        return response()->json(['message' => 'Score deleted successfully']);
+        $query = Score::with(['student', 'subject', 'schoolClass'])
+                     ->where('subject_id', $request->subject_id)
+                     ->where('class_id', $request->class_id)
+                     ->where('is_active', true);
+
+        // Filter by term if provided
+        if ($request->has('term')) {
+            $query->where('term', $request->term);
+        }
+
+        $scores = $query->orderBy('student_id')
+                        ->orderBy('term')
+                        ->get();
+
+        return response()->json($scores);
     }
 
     /**
-     * Get student results for admin view
+     * Get admin view of student results
      */
     public function adminStudentResults(Student $student)
     {
-        $scores = Score::with(['subject', 'teacher', 'schoolClass'])
-                      ->where('student_id', $student->id)
-                      ->where('is_active', true)
-                      ->get();
+        $user = request()->user();
+        
+        // Check if user is admin, form teacher of the student's class, or assigned to teach subjects in that class
+        if (!$user->isAdmin() && $student->class_id) {
+            $class = \App\Models\SchoolClass::find($student->class_id);
+            if (!$class) {
+                return response()->json(['message' => 'Class not found'], 404);
+            }
+            
+            // Check if user is form teacher of this class
+            if ($class->form_teacher_id === $user->id) {
+                // Form teacher can view all results
+            } else {
+                // Check if user is assigned to teach any subject in this class
+                $teacherAssignment = \App\Models\TeacherSubject::where('teacher_id', $user->id)
+                                                              ->where('class_id', $class->id)
+                                                              ->where('is_active', true)
+                                                              ->first();
+                
+                if (!$teacherAssignment) {
+                    return response()->json(['message' => 'You can only view results for students in your assigned classes'], 403);
+                }
+            }
+        }
+        
+        $query = Score::with(['subject', 'schoolClass', 'teacher'])
+                     ->where('student_id', $student->id)
+                     ->where('is_active', true);
+        
+        // If user is a teacher (not admin), filter by subjects they are assigned to teach
+        if ($user->isTeacher() && !$user->isAdmin()) {
+            $assignedSubjectIds = TeacherSubject::where('teacher_id', $user->id)
+                                              ->where('is_active', true)
+                                              ->pluck('subject_id');
+            
+            if ($assignedSubjectIds->isNotEmpty()) {
+                $query->whereIn('subject_id', $assignedSubjectIds);
+            }
+        }
+        
+        $scores = $query->orderBy('term')
+                        ->orderBy('subject_id')
+                        ->get()
+                        ->groupBy('term');
 
         return response()->json([
-            'student' => $student->load(['schoolClass', 'studentSubjects.subject']),
-            'scores' => $scores,
+            'student' => $student->load('schoolClass'),
+            'results' => $scores,
+        ]);
+    }
+
+    /**
+     * Get student scores for a specific student
+     */
+    public function getStudentScores(Request $request, Student $student)
+    {
+        $user = $request->user();
+        
+        // Check if user is admin, form teacher of the student's class, or assigned to teach subjects in that class
+        if (!$user->isAdmin() && $student->class_id) {
+            $class = \App\Models\SchoolClass::find($student->class_id);
+            if (!$class) {
+                return response()->json(['message' => 'Class not found'], 404);
+            }
+            
+            // Check if user is form teacher of this class
+            if ($class->form_teacher_id === $user->id) {
+                // Form teacher can view all scores
+            } else {
+                // Check if user is assigned to teach any subject in this class
+                $teacherAssignment = \App\Models\TeacherSubject::where('teacher_id', $user->id)
+                                                              ->where('class_id', $class->id)
+                                                              ->where('is_active', true)
+                                                              ->first();
+                
+                if (!$teacherAssignment) {
+                    return response()->json(['message' => 'You can only view scores for students in your assigned classes'], 403);
+                }
+            }
+        }
+        
+        $query = Score::with(['subject', 'schoolClass', 'teacher'])
+                     ->where('student_id', $student->id)
+                     ->where('is_active', true);
+        
+        // If user is a teacher (not admin), filter by subjects they are assigned to teach
+        if ($user->isTeacher() && !$user->isAdmin()) {
+            $assignedSubjectIds = TeacherSubject::where('teacher_id', $user->id)
+                                              ->where('is_active', true)
+                                              ->pluck('subject_id');
+            
+            if ($assignedSubjectIds->isNotEmpty()) {
+                $query->whereIn('subject_id', $assignedSubjectIds);
+            }
+        }
+        
+        $scores = $query->orderBy('term')
+                        ->orderBy('subject_id')
+                        ->get();
+
+        return response()->json($scores);
+    }
+
+    /**
+     * Get teacher view of student results (for form teachers)
+     */
+    public function teacherStudentResults(Request $request, Student $student)
+    {
+        $teacher = $request->user();
+        
+        // Check if teacher is a form teacher of the student's class
+        if (!$teacher->isFormTeacher()) {
+            return response()->json(['message' => 'Access denied. Only form teachers can view student results.'], 403);
+        }
+        
+        // Check if teacher is form teacher of this specific student's class
+        $class = SchoolClass::where('id', $student->class_id)
+                           ->where('form_teacher_id', $teacher->id)
+                           ->where('is_active', true)
+                           ->first();
+        
+        if (!$class) {
+            return response()->json(['message' => 'Access denied. You can only view results for students in classes where you are the form teacher.'], 403);
+        }
+        
+        // Get scores for subjects the teacher is assigned to teach in this class
+        $assignedSubjectIds = TeacherSubject::where('teacher_id', $teacher->id)
+                                          ->where('class_id', $student->class_id)
+                                          ->where('is_active', true)
+                                          ->pluck('subject_id');
+        
+        $query = Score::with(['subject', 'schoolClass', 'teacher'])
+                     ->where('student_id', $student->id)
+                     ->where('is_active', true);
+        
+        // Filter by subjects the teacher is assigned to teach
+        if ($assignedSubjectIds->isNotEmpty()) {
+            $query->whereIn('subject_id', $assignedSubjectIds);
+        }
+        
+        $scores = $query->orderBy('term')
+                        ->orderBy('subject_id')
+                        ->get()
+                        ->groupBy('term');
+
+        return response()->json([
+            'student' => $student->load('schoolClass'),
+            'results' => $scores,
+        ]);
+    }
+
+    /**
+     * Get class results for admin or form teacher
+     */
+    public function getClassResults(Request $request, SchoolClass $class)
+    {
+        $user = $request->user();
+        
+        // Check if user is admin or form teacher of this class
+        if (!$user->isAdmin() && $class->form_teacher_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized access'], 403);
+        }
+
+        $students = $class->students()
+                         ->where('is_active', true)
+                         ->with(['scores' => function ($query) use ($request) {
+                             $query->where('is_active', true)
+                                   ->with(['subject', 'teacher']);
+                             
+                             // Filter by term if provided
+                             if ($request->has('term') && $request->term !== 'current') {
+                                 $query->where('term', $request->term);
+                             }
+                         }])
+                      ->get();
+
+        // Group scores by term
+        $results = [];
+        foreach ($students as $student) {
+            $studentResults = $student->scores->groupBy('term');
+            $results[] = [
+                'student' => $student,
+                'results' => $studentResults,
+            ];
+        }
+
+        return response()->json([
+            'class' => $class->load('formTeacher'),
+            'results' => $results,
         ]);
     }
 } 

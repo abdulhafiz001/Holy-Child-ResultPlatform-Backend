@@ -11,8 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('classes', function (Blueprint $table) {
-            $table->foreignId('form_teacher_id')->nullable()->after('description')->constrained('users')->onDelete('set null');
+        Schema::table('users', function (Blueprint $table) {
+            $table->boolean('is_form_teacher')->default(false)->after('role');
         });
     }
 
@@ -21,9 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('classes', function (Blueprint $table) {
-            $table->dropForeign(['form_teacher_id']);
-            $table->dropColumn('form_teacher_id');
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('is_form_teacher');
         });
     }
 };

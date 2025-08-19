@@ -16,20 +16,19 @@ class Score extends Model
         'teacher_id',
         'first_ca',
         'second_ca',
-        'exam',
-        'total',
+        'exam_score',
+        'total_score',
         'grade',
         'remark',
         'term',
-        'academic_year',
         'is_active',
     ];
 
     protected $casts = [
         'first_ca' => 'decimal:2',
         'second_ca' => 'decimal:2',
-        'exam' => 'decimal:2',
-        'total' => 'decimal:2',
+        'exam_score' => 'decimal:2',
+        'total_score' => 'decimal:2',
         'is_active' => 'boolean',
     ];
 
@@ -70,8 +69,8 @@ class Score extends Model
      */
     public function calculateTotal()
     {
-        $this->total = ($this->first_ca ?? 0) + ($this->second_ca ?? 0) + ($this->exam ?? 0);
-        return $this->total;
+        $this->total_score = ($this->first_ca ?? 0) + ($this->second_ca ?? 0) + ($this->exam_score ?? 0);
+        return $this->total_score;
     }
 
     /**
@@ -81,33 +80,18 @@ class Score extends Model
     {
         $total = $this->calculateTotal();
         
-        if ($total >= 90) {
-            $this->grade = 'A1';
-            $this->remark = 'Excellent';
-        } elseif ($total >= 80) {
-            $this->grade = 'B2';
-            $this->remark = 'Very Good';
+        if ($total >= 80) {
+            $this->grade = 'A';
         } elseif ($total >= 70) {
-            $this->grade = 'B3';
-            $this->remark = 'Good';
+            $this->grade = 'B';
         } elseif ($total >= 60) {
-            $this->grade = 'C4';
-            $this->remark = 'Credit';
+            $this->grade = 'C';
         } elseif ($total >= 50) {
-            $this->grade = 'C5';
-            $this->remark = 'Credit';
-        } elseif ($total >= 45) {
-            $this->grade = 'C6';
-            $this->remark = 'Credit';
+            $this->grade = 'D';
         } elseif ($total >= 40) {
-            $this->grade = 'D7';
-            $this->remark = 'Pass';
-        } elseif ($total >= 35) {
-            $this->grade = 'E8';
-            $this->remark = 'Pass';
+            $this->grade = 'E';
         } else {
-            $this->grade = 'F9';
-            $this->remark = 'Fail';
+            $this->grade = 'F';
         }
         
         return $this->grade;
@@ -120,7 +104,12 @@ class Score extends Model
     {
         parent::boot();
 
-        static::saving(function ($score) {
+        static::creating(function ($score) {
+            $score->calculateTotal();
+            $score->calculateGrade();
+        });
+
+        static::updating(function ($score) {
             $score->calculateTotal();
             $score->calculateGrade();
         });

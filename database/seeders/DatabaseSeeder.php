@@ -21,16 +21,18 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create admin user
-        User::create([
+        User::firstOrCreate(
+            ['username' => 'admin'],
+            [
             'name' => 'Admin User',
             'email' => 'admin@tgcra.com',
-            'username' => 'admin',
             'password' => Hash::make('password'),
             'role' => 'admin',
             'phone' => '+234 801 234 5678',
             'address' => '123 Admin Street, Lagos',
             'is_active' => true,
-        ]);
+            ]
+        );
 
         // Create sample teachers
         $teachers = [
@@ -58,12 +60,15 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($teachers as $teacherData) {
-            User::create([
+            User::firstOrCreate(
+                ['username' => $teacherData['username']],
+                [
                 ...$teacherData,
                 'password' => Hash::make('password'),
                 'role' => 'teacher',
                 'is_active' => true,
-            ]);
+                ]
+            );
         }
 
         // Create classes
@@ -73,11 +78,35 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($classes as $className) {
-            SchoolClass::create([
-                'name' => $className,
+            SchoolClass::firstOrCreate(
+                ['name' => $className],
+                [
                 'description' => $className . ' class',
                 'is_active' => true,
-            ]);
+                ]
+            );
+        }
+
+        // Assign form teachers to some classes
+        $formTeacherAssignments = [
+            ['JSS 1A', 'jsmith'],  // Use jsmith instead of wic.man
+            ['JSS 1B', 'sjohnson'],
+            ['SS 1A', 'mbrown'],
+        ];
+
+        foreach ($formTeacherAssignments as $assignment) {
+            $className = $assignment[0];
+            $teacherUsername = $assignment[1];
+            
+            $class = SchoolClass::where('name', $className)->first();
+            $teacher = User::where('username', $teacherUsername)->first();
+            
+            if ($class && $teacher) {
+                $class->update(['form_teacher_id' => $teacher->id]);
+                echo "Assigned {$teacher->username} as form teacher to {$className}" . PHP_EOL;
+            } else {
+                echo "Failed to assign {$teacherUsername} to {$className}" . PHP_EOL;
+            }
         }
 
         // Create subjects
@@ -98,11 +127,14 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($subjects as $subjectData) {
-            Subject::create([
-                ...$subjectData,
+            Subject::firstOrCreate(
+                ['name' => $subjectData['name']],
+                [
+                    'code' => $subjectData['code'],
                 'description' => $subjectData['name'] . ' subject',
                 'is_active' => true,
-            ]);
+                ]
+            );
         }
 
         // Assign subjects to classes
@@ -137,11 +169,15 @@ class DatabaseSeeder extends Seeder
                 $subject = Subject::where('name', $subjectName)->first();
                 
                 if ($class && $subject) {
-                    ClassSubject::create([
+                    ClassSubject::firstOrCreate(
+                        [
                         'class_id' => $class->id,
                         'subject_id' => $subject->id,
+                        ],
+                        [
                         'is_active' => true,
-                    ]);
+                        ]
+                    );
                 }
             }
         }
@@ -166,12 +202,16 @@ class DatabaseSeeder extends Seeder
                     $class = SchoolClass::where('name', $className)->first();
                     
                     if ($class) {
-                        TeacherSubject::create([
+                        TeacherSubject::firstOrCreate(
+                            [
                             'teacher_id' => $teacher->id,
                             'subject_id' => $subject->id,
                             'class_id' => $class->id,
+                            ],
+                            [
                             'is_active' => true,
-                        ]);
+                            ]
+                        );
                     }
                 }
             }
@@ -212,27 +252,108 @@ class DatabaseSeeder extends Seeder
             $class = SchoolClass::where('name', $className)->first();
             
             if ($class) {
-                $student = Student::create([
+                $student = Student::firstOrCreate(
+                    ['admission_number' => $studentData['admission_number']],
+                    [
                     'first_name' => $studentData['first_name'],
                     'last_name' => $studentData['last_name'],
-                    'admission_number' => $studentData['admission_number'],
                     'email' => $studentData['email'],
                     'class_id' => $class->id,
                     'is_active' => true,
-                ]);
+                    ]
+                );
 
                 // Assign subjects to student
                 foreach ($subjectNames as $subjectName) {
                     $subject = Subject::where('name', $subjectName)->first();
                     
                     if ($subject) {
-                        StudentSubject::create([
+                        StudentSubject::firstOrCreate(
+                            [
                             'student_id' => $student->id,
                             'subject_id' => $subject->id,
+                            ],
+                            [
                             'is_active' => true,
-                        ]);
+                            ]
+                        );
                     }
                 }
+            }
+        }
+
+        // Create sample scores
+        $sampleScores = [
+            [
+                'student_name' => 'John Doe',
+                'subject_name' => 'Mathematics',
+                'term' => 'first',
+                'first_ca' => 85,
+                'second_ca' => 78,
+                'exam_score' => 82,
+            ],
+            [
+                'student_name' => 'John Doe',
+                'subject_name' => 'English Language',
+                'term' => 'first',
+                'first_ca' => 72,
+                'second_ca' => 80,
+                'exam_score' => 75,
+            ],
+            [
+                'student_name' => 'Jane Smith',
+                'subject_name' => 'Mathematics',
+                'term' => 'first',
+                'first_ca' => 90,
+                'second_ca' => 88,
+                'exam_score' => 92,
+            ],
+            [
+                'student_name' => 'Jane Smith',
+                'subject_name' => 'Biology',
+                'term' => 'first',
+                'first_ca' => 85,
+                'second_ca' => 82,
+                'exam_score' => 88,
+            ],
+            [
+                'student_name' => 'Michael Johnson',
+                'subject_name' => 'Physics',
+                'term' => 'first',
+                'first_ca' => 78,
+                'second_ca' => 75,
+                'exam_score' => 80,
+            ],
+        ];
+
+        foreach ($sampleScores as $scoreData) {
+            $student = Student::where('first_name', explode(' ', $scoreData['student_name'])[0])
+                             ->where('last_name', explode(' ', $scoreData['student_name'])[1])
+                             ->first();
+            $subject = Subject::where('name', $scoreData['subject_name'])->first();
+            
+            if ($student && $subject) {
+                $totalScore = $scoreData['first_ca'] + $scoreData['second_ca'] + $scoreData['exam_score'];
+                $grade = $totalScore >= 80 ? 'A' : ($totalScore >= 70 ? 'B' : ($totalScore >= 60 ? 'C' : ($totalScore >= 50 ? 'D' : ($totalScore >= 40 ? 'E' : 'F'))));
+                
+                Score::firstOrCreate(
+                    [
+                        'student_id' => $student->id,
+                        'subject_id' => $subject->id,
+                        'class_id' => $student->class_id,
+                        'term' => $scoreData['term'],
+                    ],
+                    [
+                        'teacher_id' => User::where('role', 'teacher')->first()->id, // Assign to a sample teacher
+                        'first_ca' => $scoreData['first_ca'],
+                        'second_ca' => $scoreData['second_ca'],
+                        'exam_score' => $scoreData['exam_score'],
+                        'total_score' => $totalScore,
+                        'grade' => $grade,
+                        'remark' => $grade === 'A' ? 'Excellent' : ($grade === 'B' ? 'Very Good' : ($grade === 'C' ? 'Good' : ($grade === 'D' ? 'Pass' : ($grade === 'E' ? 'Pass' : 'Fail')))),
+                        'is_active' => true,
+                    ]
+                );
             }
         }
     }

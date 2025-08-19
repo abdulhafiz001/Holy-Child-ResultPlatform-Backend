@@ -19,16 +19,15 @@ return new class extends Migration
             $table->foreignId('teacher_id')->constrained('users')->onDelete('cascade');
             $table->decimal('first_ca', 5, 2)->default(0);
             $table->decimal('second_ca', 5, 2)->default(0);
-            $table->decimal('exam', 5, 2)->default(0);
-            $table->decimal('total', 5, 2)->default(0);
+            $table->decimal('exam_score', 5, 2)->default(0);
+            $table->decimal('total_score', 5, 2)->default(0);
             $table->string('grade', 2)->nullable();
             $table->string('remark')->nullable();
-            $table->string('term')->default('First Term');
-            $table->string('academic_year')->default('2024/2025');
+            $table->enum('term', ['first', 'second', 'third'])->default('first');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 
-            $table->unique(['student_id', 'subject_id', 'term', 'academic_year']);
+            $table->unique(['student_id', 'subject_id', 'class_id', 'term']);
         });
     }
 

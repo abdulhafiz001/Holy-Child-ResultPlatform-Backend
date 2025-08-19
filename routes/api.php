@@ -70,28 +70,77 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/admin/students/{student}', [AdminController::class, 'updateStudent']);
         Route::delete('/admin/students/{student}', [AdminController::class, 'deleteStudent']);
         
+        // Score management
+        Route::get('/admin/scores', [ScoreController::class, 'adminIndex']);
+        Route::get('/admin/students/{student}/results', [ScoreController::class, 'adminStudentResults']);
+        Route::get('/admin/classes/{class}/results', [ScoreController::class, 'getClassResults']);
+        
         // Dashboard data
         Route::get('/admin/dashboard', [AdminController::class, 'dashboard']);
+        
+        // Profile management
+        Route::get('/admin/profile', [AdminController::class, 'getProfile']);
+        Route::put('/admin/profile', [AdminController::class, 'updateProfile']);
+        Route::put('/admin/change-password', [AdminController::class, 'changePassword']);
     });
     
     // Teacher routes
     Route::middleware('teacher')->group(function () {
         Route::get('/teacher/assignments', [TeacherController::class, 'getAssignments']);
         Route::get('/teacher/classes', [TeacherController::class, 'getClasses']);
+        Route::get('/teacher/form-teacher-classes', [TeacherController::class, 'getFormTeacherClasses']);
         Route::get('/teacher/subjects', [TeacherController::class, 'getSubjects']);
+        Route::get('/teacher/subjects/all', [TeacherController::class, 'getAllSubjects']);
         Route::get('/teacher/students', [TeacherController::class, 'getStudents']);
+        Route::post('/teacher/students', [TeacherController::class, 'addStudent']);
+        Route::put('/teacher/students/{student}', [TeacherController::class, 'updateStudent']);
+        Route::delete('/teacher/students/{student}', [TeacherController::class, 'deleteStudent']);
         Route::get('/teacher/dashboard', [TeacherController::class, 'dashboard']);
         
+        // Profile management
+        Route::get('/teacher/profile', [TeacherController::class, 'getProfile']);
+        Route::put('/teacher/profile', [TeacherController::class, 'updateProfile']);
+        Route::put('/teacher/change-password', [TeacherController::class, 'changePassword']);
+        
         // Score management
-        Route::get('/teacher/scores', [ScoreController::class, 'index']);
+        Route::get('/teacher/scores', [ScoreController::class, 'teacherIndex']);
+        Route::get('/teacher/scores/assignments', [ScoreController::class, 'getTeacherAssignmentsForScores']);
+        Route::get('/teacher/scores/students', [ScoreController::class, 'getStudentsForClassSubject']);
+        Route::get('/teacher/scores/existing', [ScoreController::class, 'getExistingScores']);
+        Route::get('/teacher/scores/subject', [ScoreController::class, 'getSubjectScores']);
         Route::post('/teacher/scores', [ScoreController::class, 'store']);
         Route::put('/teacher/scores/{score}', [ScoreController::class, 'update']);
-        Route::delete('/teacher/scores/{score}', [ScoreController::class, 'destroy']);
+        
+        // Student scores
+        Route::get('/teacher/students/{student}/scores', [ScoreController::class, 'getStudentScores']);
+        
+        // Student results (for form teachers)
+        Route::get('/teacher/students/{student}/results', [ScoreController::class, 'teacherStudentResults']);
+        
+        // Student results page (for form teachers)
+        Route::get('/teacher/student-results/{student}', [ScoreController::class, 'teacherStudentResults']);
+        
+        // Class results (for form teachers)
+        Route::get('/teacher/classes/{class}/results', [ScoreController::class, 'getClassResults']);
+        
+        // Check form teacher status
+        Route::get('/teacher/form-teacher-status', [TeacherController::class, 'checkFormTeacherStatus']);
+    });
+    
+    // Form Teacher routes (can access some admin endpoints with restrictions)
+    Route::middleware(['teacher', 'form.teacher'])->group(function () {
+        Route::get('/form-teacher/scores', [ScoreController::class, 'adminIndex']);
+        Route::get('/form-teacher/classes', [ClassController::class, 'index']);
+        Route::get('/form-teacher/classes/{class}', [ClassController::class, 'show']);
+        Route::get('/form-teacher/classes/{class}/results', [ScoreController::class, 'getClassResults']);
+        Route::get('/form-teacher/debug', [ClassController::class, 'debugFormTeacher']);
     });
     
     // Student routes
     Route::middleware('student')->group(function () {
         Route::get('/student/profile', [StudentController::class, 'getProfile']);
+        Route::put('/student/profile', [StudentController::class, 'updateProfile']);
+        Route::put('/student/change-password', [StudentController::class, 'changePassword']);
         Route::get('/student/results', [StudentController::class, 'getResults']);
         Route::get('/student/subjects', [StudentController::class, 'index']);
         Route::get('/student/dashboard', [StudentController::class, 'dashboard']);

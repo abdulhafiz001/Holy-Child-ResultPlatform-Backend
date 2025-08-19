@@ -228,4 +228,34 @@ class StudentController extends Controller
             'student' => $student->load(['schoolClass', 'studentSubjects.subject']),
         ]);
     }
+
+    /**
+     * Change student password
+     */
+    public function changePassword(Request $request)
+    {
+        $student = $request->user();
+        
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8',
+            'confirm_password' => 'required|same:new_password',
+        ]);
+
+        // Check current password
+        if (!\Illuminate\Support\Facades\Hash::check($request->current_password, $student->password)) {
+            return response()->json([
+                'message' => 'Current password is incorrect'
+            ], 400);
+        }
+
+        // Update password
+        $student->update([
+            'password' => \Illuminate\Support\Facades\Hash::make($request->new_password),
+        ]);
+
+        return response()->json([
+            'message' => 'Password changed successfully'
+        ]);
+    }
 } 

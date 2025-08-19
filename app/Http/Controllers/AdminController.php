@@ -112,6 +112,119 @@ class AdminController extends Controller
     }
 
     /**
+     * Get admin profile
+     */
+    public function getProfile(Request $request)
+    {
+        $user = $request->user();
+        
+        // Get teacher assignments if user is a teacher
+        $assignments = [];
+        if ($user->role === 'teacher') {
+            $assignments = TeacherSubject::with(['schoolClass', 'subject'])
+                                       ->where('teacher_id', $user->id)
+                                       ->where('is_active', true)
+                                       ->get()
+                                       ->groupBy('class_id')
+                                       ->map(function ($classAssignments) {
+                                           $class = $classAssignments->first()->schoolClass;
+                                           $class->subjects = $classAssignments->pluck('subject');
+                                           return $class;
+                                       })
+                                       ->values();
+        }
+
+        return response()->json([
+            'id' => $user->id,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'middle_name' => $user->middle_name,
+            'email' => $user->email,
+            'username' => $user->username,
+            'phone' => $user->phone,
+            'address' => $user->address,
+            'date_of_birth' => $user->date_of_birth,
+            'gender' => $user->gender,
+            'qualification' => $user->qualification,
+            'department' => $user->department,
+            'date_joined' => $user->created_at,
+            'role' => $user->role,
+            'is_form_teacher' => $user->is_form_teacher,
+            'avatar' => $user->avatar,
+            'assignments' => $assignments,
+        ]);
+    }
+
+    /**
+     * Update admin profile
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+        
+        $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:500',
+            'date_of_birth' => 'nullable|date',
+            'gender' => 'nullable|in:male,female',
+            'qualification' => 'nullable|string|max:500',
+            'department' => 'nullable|string|max:255',
+        ]);
+
+        $user->update([
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'middle_name' => $request->middle_name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'address' => $request->address,
+            'date_of_birth' => $request->date_of_birth,
+            'gender' => $request->gender,
+            'qualification' => $request->qualification,
+            'department' => $request->department,
+        ]);
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user->fresh(),
+        ]);
+    }
+
+    /**
+     * Change admin password
+     */
+    public function changePassword(Request $request)
+    {
+        $user = $request->user();
+        
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8',
+            'confirm_password' => 'required|same:new_password',
+        ]);
+
+        // Check current password
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'message' => 'Current password is incorrect'
+            ], 400);
+        }
+
+        // Update password
+        $user->update([
+            'password' => Hash::make($request->new_password),
+        ]);
+
+        return response()->json([
+            'message' => 'Password changed successfully'
+        ]);
+    }
+
+    /**
      * Delete a user
      */
     public function deleteUser(Request $request, User $user)
@@ -290,10 +403,32 @@ class AdminController extends Controller
             'parent_phone' => 'nullable|string',
             'parent_email' => 'nullable|email',
             'class_id' => 'required|exists:classes,id',
+            'subjects' => 'nullable|array',
+            'subjects.*' => 'string',
             'is_active' => 'boolean',
         ]);
 
         $student->update($request->all());
+
+        // Update student subjects if provided
+        if ($request->has('subjects')) {
+            // Delete existing subject relationships completely
+            $student->studentSubjects()->delete();
+            
+            // Create new subject relationships
+            if ($request->subjects && count($request->subjects) > 0) {
+                foreach ($request->subjects as $subjectName) {
+                    $subject = Subject::where('name', $subjectName)->first();
+                    if ($subject) {
+                        \App\Models\StudentSubject::create([
+                            'student_id' => $student->id,
+                            'subject_id' => $subject->id,
+                            'is_active' => true,
+                        ]);
+                    }
+                }
+            }
+        }
 
         return response()->json([
             'message' => 'Student updated successfully',
