@@ -142,7 +142,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/student/profile', [StudentController::class, 'updateProfile']);
         Route::put('/student/change-password', [StudentController::class, 'changePassword']);
         Route::get('/student/results', [StudentController::class, 'getResults']);
-        Route::get('/student/subjects', [StudentController::class, 'index']);
+        Route::get('/student/subjects', [StudentController::class, 'getSubjects']);
         Route::get('/student/dashboard', [StudentController::class, 'dashboard']);
     });
 }); 

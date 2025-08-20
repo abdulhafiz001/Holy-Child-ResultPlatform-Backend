@@ -25,6 +25,7 @@ class Student extends Model
         'parent_email',
         'class_id',
         'is_active',
+        'password',
     ];
 
     protected $casts = [
@@ -78,5 +79,45 @@ class Student extends Model
     public function getScoresForSubject($subjectId)
     {
         return $this->scores()->where('subject_id', $subjectId)->first();
+    }
+
+    /**
+     * Hash the password when setting it
+     */
+    public function setPasswordAttribute($value)
+    {
+        // Only hash if the value is not already a bcrypt hash
+        if (!$this->isBcryptHash($value)) {
+            $this->attributes['password'] = bcrypt($value);
+        } else {
+            $this->attributes['password'] = $value;
+        }
+    }
+    
+    /**
+     * Check if a string is a valid bcrypt hash
+     */
+    private function isBcryptHash($password)
+    {
+        // Bcrypt hashes start with $2y$ and are 60 characters long
+        return is_string($password) && 
+               strlen($password) === 60 && 
+               strpos($password, '$2y$') === 0;
+    }
+
+    /**
+     * Verify the student's password
+     */
+    public function verifyPassword($password)
+    {
+        return password_verify($password, $this->password);
+    }
+
+    /**
+     * Check if student is active
+     */
+    public function isActive()
+    {
+        return $this->is_active;
     }
 } 

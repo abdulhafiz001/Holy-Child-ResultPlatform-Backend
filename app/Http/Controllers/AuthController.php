@@ -54,7 +54,7 @@ class AuthController extends Controller
                          ->where('is_active', true)
                          ->first();
 
-        if (!$student || $request->password !== 'mypassword') {
+        if (!$student || !Hash::check($request->password, $student->password)) {
             throw ValidationException::withMessages([
                 'admission_number' => ['The provided credentials are incorrect.'],
             ]);
@@ -63,7 +63,7 @@ class AuthController extends Controller
         $token = $student->createToken('student-token')->plainTextToken;
 
         return response()->json([
-            'student' => $student->load('schoolClass'),
+            'student' => $student->load(['schoolClass', 'studentSubjects.subject']),
             'token' => $token,
             'role' => 'student',
         ]);

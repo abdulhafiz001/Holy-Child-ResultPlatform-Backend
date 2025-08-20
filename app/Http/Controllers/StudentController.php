@@ -180,6 +180,121 @@ class StudentController extends Controller
     }
 
     /**
+     * Get student subjects (for student access)
+     */
+    public function getSubjects(Request $request)
+    {
+        $student = $request->user();
+        
+        // Get the student's subjects through the StudentSubject relationship
+        $studentSubjects = StudentSubject::with(['subject'])
+                                       ->where('student_id', $student->id)
+                                       ->where('is_active', true)
+                                       ->get();
+        
+        // Transform the data to include additional information
+        $subjects = $studentSubjects->map(function ($studentSubject) {
+            $subject = $studentSubject->subject;
+            
+            // Get the latest score for this subject to calculate progress and grade
+            $latestScore = Score::where('student_id', $studentSubject->student_id)
+                               ->where('subject_id', $subject->id)
+                               ->where('is_active', true)
+                               ->latest()
+                               ->first();
+            
+            // Calculate progress based on completed assessments
+            $progress = 0;
+            if ($latestScore) {
+                $completedAssessments = 0;
+                if ($latestScore->first_ca !== null) $completedAssessments++;
+                if ($latestScore->second_ca !== null) $completedAssessments++;
+                if ($latestScore->exam_score !== null) $completedAssessments++;
+                $progress = round(($completedAssessments / 3) * 100);
+            }
+            
+            // Calculate grade if all scores are available
+            $grade = 'N/A';
+            if ($latestScore && $latestScore->first_ca !== null && 
+                $latestScore->second_ca !== null && $latestScore->exam_score !== null) {
+                $total = $latestScore->first_ca + $latestScore->second_ca + $latestScore->exam_score;
+                
+                if ($total >= 80) $grade = 'A';
+                elseif ($total >= 70) $grade = 'B';
+                elseif ($total >= 60) $grade = 'C';
+                elseif ($total >= 50) $grade = 'D';
+                elseif ($total >= 40) $grade = 'E';
+                else $grade = 'F';
+            }
+            
+            return [
+                'id' => $subject->id,
+                'name' => $subject->name,
+                'code' => $subject->code,
+                'description' => $subject->description || 'Subject description not available',
+                'progress' => $progress,
+                'grade' => $grade,
+                'color' => $this->getSubjectColor($subject->name),
+                'icon' => $this->getSubjectIcon($subject->name),
+
+                'latest_score' => $latestScore ? [
+                    'first_ca' => $latestScore->first_ca,
+                    'second_ca' => $latestScore->second_ca,
+                    'exam_score' => $latestScore->exam_score,
+                    'total' => $latestScore->total_score,
+                    'term' => $latestScore->term
+                ] : null
+            ];
+        });
+        
+        return response()->json($subjects);
+    }
+    
+    /**
+     * Get subject color based on subject name
+     */
+    private function getSubjectColor($subjectName)
+    {
+        $colors = [
+            'Mathematics' => 'from-blue-500 to-blue-600',
+            'English' => 'from-red-500 to-red-600',
+            'Physics' => 'from-purple-500 to-purple-600',
+            'Chemistry' => 'from-green-500 to-green-600',
+            'Biology' => 'from-emerald-500 to-emerald-600',
+            'Computer Science' => 'from-indigo-500 to-indigo-600',
+            'Literature' => 'from-pink-500 to-pink-600',
+            'History' => 'from-yellow-500 to-yellow-600',
+            'Geography' => 'from-orange-500 to-orange-600',
+            'Economics' => 'from-teal-500 to-teal-600',
+        ];
+        
+        return $colors[$subjectName] ?? 'from-gray-500 to-gray-600';
+    }
+    
+    /**
+     * Get subject icon based on subject name
+     */
+    private function getSubjectIcon($subjectName)
+    {
+        $icons = [
+            'Mathematics' => '📐',
+            'English' => '📚',
+            'Physics' => '⚡',
+            'Chemistry' => '🧪',
+            'Biology' => '🔬',
+            'Computer Science' => '💻',
+            'Literature' => '📖',
+            'History' => '🏛️',
+            'Geography' => '🌍',
+            'Economics' => '💰',
+        ];
+        
+        return $icons[$subjectName] ?? '📚';
+    }
+    
+
+
+    /**
      * Get student results (for student access)
      */
     public function getResults(Request $request)
@@ -191,7 +306,20 @@ class StudentController extends Controller
                       ->where('is_active', true)
                       ->get();
 
-        return response()->json($scores);
+        // Group scores by term
+        $resultsByTerm = [];
+        foreach ($scores as $score) {
+            $term = $score->term ?? 'First Term'; // Default to First Term if no term specified
+            if (!isset($resultsByTerm[$term])) {
+                $resultsByTerm[$term] = [];
+            }
+            $resultsByTerm[$term][] = $score;
+        }
+
+        return response()->json([
+            'student' => $student->load(['schoolClass', 'studentSubjects.subject']),
+            'results' => $resultsByTerm
+        ]);
     }
 
     /**
