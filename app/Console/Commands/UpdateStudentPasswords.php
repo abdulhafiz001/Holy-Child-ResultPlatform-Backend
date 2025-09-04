@@ -20,7 +20,7 @@ class UpdateStudentPasswords extends Command
      *
      * @var string
      */
-    protected $description = 'Update existing students with properly hashed default password "mypassword"';
+    protected $description = 'Update existing students with properly hashed default password "password"';
 
     /**
      * Execute the console command.
@@ -40,14 +40,14 @@ class UpdateStudentPasswords extends Command
         
         foreach ($students as $student) {
             // Force update all passwords with fresh hashes
-            $student->password = Hash::make('mypassword');
+            $student->password = Hash::make('password');
             $student->save();
             $updatedCount++;
             $this->info("Updated password for student: {$student->first_name} {$student->last_name} ({$student->admission_number})");
         }
         
         $this->info("Updated {$updatedCount} students with properly hashed default password.");
-        $this->info('Default password is: mypassword');
+        $this->info('Default password is: password');
         $this->info('All passwords are now properly hashed with bcrypt!');
         
         return 0;

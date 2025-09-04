@@ -61,13 +61,14 @@ class AdminController extends Controller
             'role' => 'required|in:admin,teacher',
             'phone' => 'nullable|string',
             'address' => 'nullable|string',
+            'password' => 'nullable|string|min:6',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'username' => $request->username,
-            'password' => Hash::make('password'), // Default password
+            'password' => Hash::make($request->password ?? 'password'), // Use provided password or default
             'role' => $request->role,
             'phone' => $request->phone,
             'address' => $request->address,
@@ -356,6 +357,7 @@ class AdminController extends Controller
             'parent_phone' => $request->parent_phone,
             'parent_email' => $request->parent_email,
             'class_id' => $request->class_id,
+            'password' => 'password', // Set default password
             'is_active' => true,
         ]);
 
