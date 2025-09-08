@@ -357,7 +357,7 @@ class AdminController extends Controller
             'parent_phone' => $request->parent_phone,
             'parent_email' => $request->parent_email,
             'class_id' => $request->class_id,
-            'password' => 'password', // Set default password
+            'password' => Hash::make('password'), // Hash the default password
             'is_active' => true,
         ]);
 

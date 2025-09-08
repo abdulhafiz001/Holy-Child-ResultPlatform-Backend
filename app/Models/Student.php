@@ -99,10 +99,10 @@ class Student extends Model
      */
     private function isBcryptHash($password)
     {
-        // Bcrypt hashes start with $2y$ and are 60 characters long
+        // Bcrypt hashes start with $2y$ or $2a$ and are 60 characters long
         return is_string($password) && 
                strlen($password) === 60 && 
-               strpos($password, '$2y$') === 0;
+               (strpos($password, '$2y$') === 0 || strpos($password, '$2a$') === 0);
     }
 
     /**
