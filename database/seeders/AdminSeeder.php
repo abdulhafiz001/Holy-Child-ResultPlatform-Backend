@@ -19,7 +19,7 @@ class AdminSeeder extends Seeder
             ['username' => 'admin'],
             [
                 'name' => 'Admin User',
-                'email' => 'admin@tgcra.com',
+                'email' => 'admin@holychild.edu.ng',
                 'password' => Hash::make('password'),
                 'role' => 'admin',
                 'phone' => '+234 801 234 5678',

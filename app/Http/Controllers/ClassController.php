@@ -38,7 +38,7 @@ class ClassController extends Controller
         
         // Manually add student count for each class
         $classes = $classes->map(function ($class) {
-            $class->student_count = $class->students->count();
+            $class->students_count = $class->students->count();
             return $class;
         });
 

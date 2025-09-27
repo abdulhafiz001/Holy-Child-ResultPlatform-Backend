@@ -25,21 +25,21 @@ class DevelopmentSeeder extends Seeder
         $teachers = [
             [
                 'name' => 'John Smith',
-                'email' => 'john.smith@tgcra.com',
+                'email' => 'john.smith@holychild.edu.ng',
                 'username' => 'jsmith',
                 'phone' => '+234 802 345 6789',
                 'address' => '456 Teacher Avenue, Lagos',
             ],
             [
                 'name' => 'Sarah Johnson',
-                'email' => 'sarah.johnson@tgcra.com',
+                'email' => 'sarah.johnson@holychild.edu.ng',
                 'username' => 'sjohnson',
                 'phone' => '+234 803 456 7890',
                 'address' => '789 Educator Road, Lagos',
             ],
             [
                 'name' => 'Michael Brown',
-                'email' => 'michael.brown@tgcra.com',
+                'email' => 'michael.brown@holychild.edu.ng',
                 'username' => 'mbrown',
                 'phone' => '+234 804 567 8901',
                 'address' => '321 Instructor Lane, Lagos',
