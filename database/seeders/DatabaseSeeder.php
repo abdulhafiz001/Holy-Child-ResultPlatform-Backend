@@ -10,7 +10,7 @@ class DatabaseSeeder extends Seeder
      * Seed the application's database.
      * 
      * This seeder can be configured for different environments:
-     * - Production: Only run AdminSeeder
+     * - Production: Use `php artisan db:seed-production` command
      * - Development: Run AdminSeeder + DevelopmentSeeder
      * - Testing: Run specific seeders as needed
      */
