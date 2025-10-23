@@ -21,6 +21,10 @@ use App\Http\Controllers\ScoreController;
 |
 */
 
+Route::get('/test', function () {
+    return response()->json(['status' => 'success', 'message' => 'API is working!']);
+});
+
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
